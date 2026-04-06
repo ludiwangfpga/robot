@@ -1,0 +1,75 @@
+3.3 频率冗余利用：自适应阻抗控制
+
+本系统的阻抗控制流水线以 253 kHz 更新，FOC 电流环以 36 kHz 驱动电机，两者之间存在 7:1 的精确整数比。每个 FOC 周期（27.65 μs）内包含 7 次阻抗控制计算，其中仅第 1 次被 FOC 直接使用，其余 6 次构成冗余计算周期。本研究将这些冗余周期转化为自适应阻抗控制功能。
+
+3.3.1 自适应阻抗控制
+
+3.2.4 节的阻抗控制律采用固定参数 K_s 和 D_s，但实际遥操作中环境刚度 K_env 未知且时变[1]。固定参数存在根本矛盾：高刚度在硬接触时产生过大接触力，低刚度在软环境中导致跟踪误差增大。自适应阻抗控制通过在线估计 K_env 并动态调整参数来解决这一矛盾。
+
+环境接触力在关节空间中建模为[2]：
+
+τ_{ext,i} = K_{env,i} · e_{q,i}    (i = 1, 2, ..., 6)                               (3.8)
+
+其中 τ_{ext,i} 为外部扰动力矩，e_{q,i} = q_{d,i} − q_i 为关节位置误差。对角化假设使六个关节完全解耦，每个关节独立运行一个标量 RLS 估计器。
+
+3.3.2 无传感器力矩获取
+
+外部力矩 τ_{ext} 通过 FOC 电流环反馈的实际 q 轴电流反推获得[3]：
+
+τ_{meas,i} = K_{t,i} · i_{q,actual,i}                                                (3.9)
+
+τ_{ext,i} = τ_{meas,i} − τ_{cmd,i}                                                   (3.10)
+
+其中 τ_{cmd,i} 为阻抗控制器输出的力矩指令。该方法完全复用 FOC 已有的电流传感器，无需额外力/力矩传感器。
+
+3.3.3 RLS 在线估计
+
+每个关节的 K_{env,i} 通过带遗忘因子的标量 RLS 算法在线估计[4]：
+
+γ_i = (P_i · e_{q,i}) / (λ + e_{q,i} · P_i · e_{q,i})                              (3.11)
+
+K_{env,i} ← K_{env,i} + γ_i · (τ_{ext,i} − K_{env,i} · e_{q,i})                   (3.12)
+
+P_i ← (1/λ) · (P_i − γ_i · e_{q,i} · P_i)                                         (3.13)
+
+遗忘因子 λ = 0.98，对应等效数据窗口 50 次采样（约 200 μs），可在 50 次迭代内收敛至真实值的 95%。
+
+3.3.4 死区保护与自适应规则
+
+自由空间运动时 e_{q,i} 极小，RLS 增益发散。当 |e_{q,i}| < ε_dz = 0.001 rad 时，冻结 RLS 更新，输出名义参数。
+
+接触状态下，刚度按反比例规则调整[5]：
+
+K_{s,out,i} = clamp(K_{s,nom,i}² / K_{env,i}, K_{s,min}, K_{s,max})                 (3.14)
+
+环境越硬则控制器越软，环境越软则控制器越硬，维持闭环总体刚度近似恒定。阻尼同步调整以保持阻尼比：
+
+D_{s,out,i} = D_{s,nom,i} · K_{s,out,i} / K_{s,nom,i}                              (3.15)
+
+自适应模块总延迟 48 周期，与 FK（382 周期）并行执行，不增加总流水线延迟。
+
+3.3.5 频率冗余利用总结
+
+表 3.2 总结了 7:1 频率冗余中各计算周期的分配。
+
+表 3.2  频率冗余利用分配
+
+| 冗余周期 | 功能                   | 延迟（周期）| 说明                           |
+|---------|------------------------|-----------|-------------------------------|
+| 第 1 次  | 阻抗控制主输出          | 395       | 正常控制链输出 i_q^*           |
+| 第 2-7 次 | 自适应阻抗控制（RLS）    | 48        | 与 FK 并行，更新 K_s, D_s      |
+
+自适应功能不增加主流水线延迟，将传统系统浪费的计算资源转化为算法性能提升。
+
+
+参考文献：
+
+[1] F. J. Abu-Dakka and V. Kyrki, "Variable impedance control and learning—A review," Frontiers Robot. AI, vol. 7, Art. no. 590681, Dec. 2020.
+
+[2] B. Siciliano, L. Sciavicco, L. Villani, and G. Oriolo, Robotics: Modelling, Planning and Control. London: Springer, 2010.
+
+[3] S. Haddadin, A. De Luca, and A. Albu-Schäffer, "Robot collisions: A survey on detection, isolation, and identification," IEEE Trans. Robot., vol. 33, no. 6, pp. 1292-1312, Dec. 2017.
+
+[4] S. Haykin, Adaptive Filter Theory, 5th ed. Upper Saddle River, NJ: Prentice Hall, 2014.
+
+[5] L. Roveda, N. Pedrocchi, F. Vicentini, and L. M. Tosatti, "Robot-environment interaction control via adaptive impedance estimation," IEEE/ASME Trans. Mechatronics, vol. 22, no. 4, pp. 1629-1640, Aug. 2017.

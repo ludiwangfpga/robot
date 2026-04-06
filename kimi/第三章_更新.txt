@@ -1,0 +1,28 @@
+3.1 引言
+
+在第二章所述的双边遥操作系统架构中，FPGA 承担了从关节角度采样到电机 PWM 输出的完整闭环计算任务。与传统方案将运动学、力控制和电机驱动分别部署于 CPU、DSP 和专用驱动板不同，本研究将全部算法统一实现于单片 FPGA 内部，形成一条无中断的硬件计算流水线。本章沿该流水线的数据流方向，依次介绍各阶段的算法原理。
+
+如图 3.X 所示，该流水线按功能划分为三部分。第一部分为机械臂控制算法（3.2 节），构成从关节角度到电流指令的主信号链：编码器采集六个关节角度 q ∈ ℝ⁶；正运动学（FK）模块根据 D-H 参数将关节角映射为末端位姿 x ∈ ℝ⁶[1]；解析雅可比模块复用 FK 中间变换矩阵构建雅可比矩阵 J ∈ ℝ⁶ˣ⁶；速度估计模块通过后向差分与低通滤波得到末端速度 ẋ ∈ ℝ⁶；阻抗控制模块按 F = K_s(x_d − x) + D_s(ẋ_d − ẋ) 生成期望交互力 F ∈ ℝ⁶[2]；雅可比转置映射通过 τ = J^T F 将任务空间力转换为关节力矩[3]；力矩-电流转换将力矩除以电机力矩常数 K_t 得到 q 轴电流参考值 i_q^*。整条主链路可概括为：
+
+q → FK → x, J → ẋ → F → τ → i_q^*
+
+
+第三部分为 FOC 电机驱动算法（3.4 节）。六通道并行 FOC 接收电流指令，经 Clark 变换、Park 变换、PI 电流环、逆 Park 变换和 SVPWM，输出驱动三相逆变器的 PWM 信号[4]。FOC 电流反馈还为自适应阻抗控制提供无传感器力矩估计。
+各算法的 FPGA 流水线时序与硬件实现细节将在第五章讨论。
+
+3.2 机械臂控制算法
+
+本节介绍从关节角度 q 到电流指令 i_q^* 的控制算法链，对应图 3.X 中从编码器输入到 FOC 接口的上半部分数据通路。
+
+
+参考文献：
+
+[1] B. Siciliano, L. Sciavicco, L. Villani, and G. Oriolo, Robotics: Modelling, Planning and Control. London: Springer, 2010.
+
+[2] N. Hogan, "Impedance control: An approach to manipulation: Part I—Theory, Part II—Implementation, Part III—Applications," ASME J. Dyn. Syst. Meas. Control, vol. 107, no. 1, pp. 1-24, Mar. 1985.
+
+[3] O. Khatib, "A unified approach for motion and force control of robot manipulators: The operational space formulation," IEEE J. Robot. Autom., vol. 3, no. 1, pp. 43-53, Feb. 1987.
+
+[4] E. Monmasson, L. Idkhajine, M. N. Cirstea, I. Bahri, A. Tisan, and M. W. Naouar, "FPGAs in industrial control applications," IEEE Trans. Ind. Inform., vol. 7, no. 2, pp. 224-243, May 2011.
+
+[5] P. K. Meher, J. Valls, T.-B. Juang, K. Sridharan, and K. Maharatna, "50 years of CORDIC: Algorithms, architectures, and applications," IEEE Trans. Circuits Syst. I, Reg. Papers, vol. 56, no. 9, pp. 1893-1907, Sep. 2009.

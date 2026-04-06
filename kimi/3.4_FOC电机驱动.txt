@@ -1,0 +1,64 @@
+3.4 FOC 电机驱动
+
+阻抗控制链输出的电流参考值 i_q^*（或经预测器修正后的 i_{q,pred}）通过磁场定向控制（FOC）转换为驱动电机的 PWM 信号。本节介绍 FOC 各环节的数学原理、六通道并行架构及跨时钟域传递方案。
+
+3.4.1 FOC 控制环路
+
+FOC 通过坐标变换将三相交流电流分解为磁通分量 i_d 和力矩分量 i_q，实现独立控制[1]。i_d = 0 时电磁力矩仅由 i_q 决定，力矩/电流比最大。控制环路依次为：Clark 变换 → Park 变换 → PI 控制器 → 逆 Park 变换 → SVPWM。
+
+3.4.2 Clark 变换
+
+Clark 变换将三相电流 (i_a, i_b, i_c) 转换为两相静止坐标系 (i_α, i_β)[1]：
+
+i_α = (2i_a − i_b − i_c) / 3
+                                                                                      (3.18)
+i_β = √3(i_b − i_c) / 3
+
+硬件实现中，i_α 简化为移位和加减法；i_β 中的 √3 乘法通过移位-累加近似实现[2]，完全消除乘法器。
+
+3.4.3 Park 变换
+
+Park 变换将 (i_α, i_β) 旋转至与转子磁场同步的 d-q 坐标系[1]：
+
+i_d = i_α · cos ψ + i_β · sin ψ
+                                                                                      (3.19)
+i_q = −i_α · sin ψ + i_β · cos ψ
+
+其中 ψ = p · θ_m 为转子电角度。sin ψ 和 cos ψ 通过 12 位地址的查找表实现。
+
+3.4.4 PI 电流环控制器
+
+d 轴和 q 轴分别采用 PI 控制器闭环调节[3]：
+
+V_d = K_p · (i_d^* − i_d) + K_i · ∫(i_d^* − i_d) dt
+                                                                                      (3.20)
+V_q = K_p · (i_q^* − i_q) + K_i · ∫(i_q^* − i_q) dt
+
+其中 i_d^* = 0，i_q^* 为阻抗控制链输出。积分项通过累加器实现，带抗饱和（anti-windup）保护。
+
+3.4.5 逆 Park 变换与 SVPWM
+
+PI 输出的 (V_d, V_q) 经逆 Park 变换回静止坐标系：
+
+V_α = V_d · cos ψ − V_q · sin ψ
+                                                                                      (3.21)
+V_β = V_d · sin ψ + V_q · cos ψ
+
+SVPWM 根据电压向量的幅值和角度，在一个 PWM 周期内通过相邻基本向量和零向量的时间组合合成三相电压输出[1]。采用 7 段式调制，PWM 频率为 73.728 MHz / 2048 ≈ 36 kHz。
+
+3.4.6 六通道并行与跨时钟域传递
+
+六个 PMSM 电机对应六个独立 FOC 通道，在 73.728 MHz 时钟域下完全并行运行。阻抗控制域（100 MHz）与 FOC 域（73.728 MHz）之间通过双触发器同步器（double-flop synchronizer）传递数据[4]，消除亚稳态风险。i_q^* 参考值从 100 MHz 域同步至 FOC 域，i_{q,actual} 反馈信号反向同步回 100 MHz 域供自适应模块使用。六通道共输出 18 路 PWM 信号。
+
+需指出，7:1 是控制更新频率之比（253 kHz / 36 kHz），而非时钟频率之比。253 kHz = 100 MHz / 395 周期，36 kHz = 73.728 MHz / 2048。
+
+
+参考文献：
+
+[1] E. Monmasson, L. Idkhajine, M. N. Cirstea, I. Bahri, A. Tisan, and M. W. Naouar, "FPGAs in industrial control applications," IEEE Trans. Ind. Inform., vol. 7, no. 2, pp. 224-243, May 2011.
+
+[2] T. Instruments, "Clarke & Park transforms on the TMS320C2xx," Application Report BPRA048, Texas Instruments, 1997.
+
+[3] R. Krishnan, Permanent Magnet Synchronous and Brushless DC Motor Drives. Boca Raton, FL: CRC Press, 2010.
+
+[4] C. E. Cummings, "Synthesis and scripting techniques for designing multi-asynchronous clock designs," in Proc. SNUG San Jose, 2001, pp. 1-39.
