@@ -1,0 +1,10 @@
+【第二段完整修改版，【新增】为插入内容】
+
+尽管力反馈技术在远程操作中展现出巨大的潜力，但要构建理想的触觉反馈系统，仍需在延迟、力矩精度与位置精度三个核心维度上克服现存的底层技术瓶颈。首先，在涉及复杂算法解算与多节点设备通信的架构中，显著的计算与传输延迟不仅会削弱操作者的交互透明性与临场感[3, 4]，还可能引发控制闭环的振荡，进而导致高精度任务中的操作失误[8-10]。其次，精细外科手术等场景对交互力的施加提出了严格要求。若底层系统在力矩计算与生成环节存在误差，将直接导致远端感知力的失真，从而增加意外组织损伤的临床风险。进一步地，即使力矩生成环节本身精度足够，传统阻抗控制器采用的固定刚度和阻尼参数仍难以适应实际遥操作中环境刚度未知且时变的特点。例如在微创手术中，器械从软组织切换到骨骼表面时，环境刚度可在数个量级间突变[11]。固定参数的阻抗控制器在此类场景下面临根本矛盾：高刚度参数在硬接触时产生高达 39%–44% 的力过冲，威胁操作安全；低刚度参数则导致柔软环境中位置跟踪误差显著增大[12]。自适应阻抗控制通过在线估计环境刚度并实时调整控制参数，已被证明能将力跟踪均方误差降低 [13]，并在双边遥操作中显著减少接触振荡、提升力反馈平滑性[14]。然而，自适应阻抗算法需在每个控制周期内完成在线参数估计与更新，会显著增加计算负担。最后，在对空间定位要求极严苛的医疗领域，由逆运动学解算误差引发的位置偏差会产生重大的安全隐患。以现有行业基准为例，主流电机驱动微创手术系统（RMIS）的轨迹误差需严格控制在 0.15 mm 以内[文1]；而在神经与眼科显微操作中，系统的绝对定位精度通常被要求达到 50μm。在此类空间极度受限的解剖环境中，即使是微小的亚毫米级轨迹偏离，也极易造成不可逆的脆弱组织损伤[文2]。
+
+
+【参考文献】
+ref-A: F. J. Abu-Dakka and D. Saveriano, "Variable impedance control and learning—A review," Frontiers in Robotics and AI, vol. 7, Art. no. 590681, 2020.
+ref-B: Z. Li, S. Zhao, and Q. Chen, "Adaptive impedance control for force tracking based on fractional-order PID controller," Applied Sciences, vol. 13, no. 18, Art. no. 10267, 2023.
+ref-C: Y. Michel et al., "Bilateral teleoperation with adaptive impedance control for contact tasks," IEEE RA-L, vol. 6, no. 3, pp. 5429-5436, 2021.
+ref-D: L. Roveda et al., "Robot-environment interaction control via adaptive impedance estimation," IEEE/ASME Trans. Mechatronics, vol. 22, no. 4, pp. 1629-1640, 2017.

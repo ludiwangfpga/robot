@@ -1,0 +1,26 @@
+3.1 引言
+
+在双边遥操作系统架构中（详见第二章），FPGA 承担了从关节角度采样到电机 PWM 输出的完整闭环计算任务。与传统方案将运动学、力控制和电机驱动分别部署于 CPU、DSP 和专用驱动板不同，本研究将上述全部算法统一实现于单片 FPGA 内部，形成一条无中断的硬件计算流水线。本章将沿该流水线的数据流方向，依次介绍各阶段的控制算法原理与数学模型。
+
+该流水线的数据流如下所述。首先，编码器采集从手机械臂六个关节的角度 q ∈ ℝ⁶，正运动学（Forward Kinematics, FK）模块根据 Denavit-Hartenberg（D-H）参数将关节角映射为末端执行器在任务空间中的位姿 x ∈ ℝ⁶（包含三维位置和三维姿态），该方法是串联机械臂运动学建模的标准方法[1]。在正运动学的计算过程中，各关节坐标系之间的中间变换矩阵被同步保留，解析雅可比（Analytical Jacobian）模块直接复用这些中间结果构建 6×6 雅可比矩阵 J ∈ ℝ⁶ˣ⁶，无需额外的数值微分。随后，速度估计模块对相邻两次位姿测量进行后向差分并经低通滤波，得到末端速度 ẋ ∈ ℝ⁶。阻抗控制模块根据期望位姿 x_d、期望速度 ẋ_d 与实际值之间的偏差，按照阻抗控制律 F = K_s(x_d − x) + D_s(ẋ_d − ẋ) 生成任务空间中的期望交互力 F ∈ ℝ⁶——该方法通过调节机械臂末端的等效阻抗实现与环境的柔顺交互，已被广泛应用于人机协作和力交互场景[2]。雅可比转置映射模块通过 τ = J^T F 将该力从任务空间映射为关节空间的力矩指令 τ ∈ ℝ⁶，该映射源自操作空间统一控制框架[3]。力矩-电流转换模块将力矩指令除以电机力矩常数 K_t，得到各关节的 q 轴电流参考值 i_q ∈ ℝ⁶。最终，六通道并行磁场定向控制（Field-Oriented Control, FOC）模块接收电流指令，经 Clark 变换、Park 变换、PI 电流环调节、逆变换和空间矢量脉宽调制（SVPWM），输出驱动三相逆变器的 PWM 信号——FOC 将三相电流解耦为独立可控的磁通与力矩分量，FPGA 的硬件并行特性使其成为 FOC 高频电流环控制的理想平台[4]。整条链路的数据流可概括为：
+
+q → FK → x, J → ẋ → F → τ → i_q → FOC → PWM
+
+上述全部计算均在 FPGA 内部以定点算术完成，其中所有三角函数运算（正弦、余弦、反正切）均通过 CORDIC（Coordinate Rotation Digital Computer）迭代算法以纯移位-加减法实现，避免了对硬件浮点乘法器的依赖[5]。定点格式的选择需要在数值动态范围、计算精度和硬件资源消耗之间取得平衡。动态范围方面，6-DOF 机械臂各关节角范围为 ±π rad，连杆参数最大值为 0.200 m，正运动学输出的末端位置范围约为 ±0.5 m，阻抗控制输出的力范围约为 ±100 N，力矩范围约为 ±50 Nm——上述物理量的整数部分均不超过数百量级。精度方面，第二章的分析表明正运动学位置误差须控制在 0.15 mm 以内，即定点格式的最小分辨率应至少优于 0.01 mm 量级，以保证在六级矩阵连乘的误差累积后仍满足精度要求。
+
+基于上述约束，本研究统一采用 Q16.16 有符号定点格式：32 位字宽中，1 位符号位、15 位整数位、16 位小数位。其整数部分可表示 ±32768 的范围，充分覆盖上述全部物理量；小数部分的分辨率为 2⁻¹⁶ ≈ 1.526 × 10⁻⁵，即约 0.015 mm，为 0.15 mm 精度要求提供了一个数量级的裕量。与浮点运算相比，Q16.16 定点乘法仅需一次 32×32 位整数乘法和一次 16 位右移即可完成，无需指数对齐和归一化逻辑，在 FPGA 上可直接映射为单个 DSP48 硬核，兼顾了计算精度和硬件效率。全链路统一采用同一定点格式，还消除了模块间的格式转换开销——数据在正运动学、雅可比、阻抗控制、力矩映射和电流转换之间直接传递，无需插入额外的定标或截断逻辑。
+
+本章后续各节将沿上述数据流方向，依次介绍正运动学与解析雅可比（3.2 节）、任务空间阻抗控制（3.3 节）、力矩-电流转换与 FOC 电机驱动（3.4 节）以及无传感器力估计（3.5 节）的算法原理。各算法的 FPGA 流水线时序优化和硬件实现细节将在第五章中专门讨论。
+
+
+参考文献：
+
+[1] B. Siciliano, L. Sciavicco, L. Villani, and G. Oriolo, Robotics: Modelling, Planning and Control. London: Springer, 2010.
+
+[2] F. J. Abu-Dakka and V. Kyrki, "Variable impedance control and learning—A review," Frontiers Robot. AI, vol. 7, Art. no. 590681, Dec. 2020.
+
+[3] B. Siciliano and O. Khatib, Eds., Springer Handbook of Robotics, 2nd ed. Berlin: Springer, 2016.
+
+[4] E. Monmasson, L. Idkhajine, M. N. Cirstea, I. Bahri, A. Tisan, and M. W. Naouar, "FPGAs in industrial control applications," IEEE Trans. Ind. Inform., vol. 7, no. 2, pp. 224-243, May 2011.
+
+[5] P. K. Meher, J. Valls, T.-B. Juang, K. Sridharan, and K. Maharatna, "50 years of CORDIC: Algorithms, architectures, and applications," IEEE Trans. Circuits Syst. I, Reg. Papers, vol. 56, no. 9, pp. 1893-1907, Sep. 2009.
