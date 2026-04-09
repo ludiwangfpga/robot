@@ -1,0 +1,5 @@
+platform,latency_us,speedup_vs_fpga
+FPGA_100MHz,3.95,1.0
+ThisPC_C_O2,0.672,0.2
+ARM_A53_1333MHz_est,6.72,1.7
+STM32H7_480MHz_est,20.17,5.1

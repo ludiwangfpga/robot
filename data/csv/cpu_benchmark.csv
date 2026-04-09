@@ -1,0 +1,6 @@
+platform,freq,fk_jac_us,vel_us,imp_us,jt_us,t2iq_us,total_us,speedup_vs_fpga
+FPGA,100MHz,3.82,0.03,0.02,0.06,0.02,3.95,1.0
+ARM_A53_est,1.333GHz,1.91,0.0750,0.0615,0.1410,0.1065,2.60,0.7
+STM32H7_est,480MHz,,,,,,6.26,1.6
+Python_float64,measured,124.06,1.2020,1.4628,0.8007,2.6891,134.54,34.1
+Python_Q16_16,measured,229.77,,,,,237.59,60.1
